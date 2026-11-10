@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Пневматический Тир — С Днем Рождения!</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* Предотвращение зума и выделения текста на iOS */
+        * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a24;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* Прицел курсор */
+        .crosshair-cursor {
+            cursor: crosshair;
+        }
+
+        /* Кастомный прицел */
+        #custom-crosshair {
+            pointer-events: none;
+            transition: transform 0.05s ease-out;
+        }
+
+        /* Эффект отдачи */
+        .recoil {
+            transform: scale(0.96) translateY(8px) !important;
+        }
+
+        /* Анимация вспышки при выстреле */
+        @keyframes muzzleFlash {
+            0% { opacity: 0.8; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.5); }
+        }
+        .flash {
+            animation: muzzleFlash 0.1s ease-out forwards;
+        }
+
+        /* Плавные переходы для модалок */
+        .modal-enter {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        .modal-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen text-white select-none crosshair-cursor bg-slate-900">
+
+    <!-- Верхняя панель (Счетчик и статус) -->
+    <header class="w-full max-w-md p-4 flex justify-between items-center z-10 bg-slate-800/80 backdrop-blur border-b border-slate-700/50 rounded-b-2xl shadow-lg">
+        <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-bullseye text-red-500 text-xl animate-pulse"></i>
+            <span class="font-bold text-lg tracking-wide text-slate-200">ПНЕВМО-ТИР</span>
+        </div>
+        <div class="flex items-center bg-slate-900/80 px-4 py-1.5 rounded-full border border-slate-700">
+            <span class="text-xs text-slate-400 mr-2 uppercase tracking-wider font-semibold">Мишени:</span>
+            <span id="score-counter" class="text-xl font-extrabold text-amber-400">0 / 3</span>
+        </div>
+    </header>
+
+    <!-- Основной Игровой Экран (Canvas) -->
+    <main id="game-container" class="relative w-full flex-1 max-w-lg flex items-center justify-center p-2 overflow-hidden">
+        <canvas id="gameCanvas" class="w-full h-full rounded-2xl shadow-2xl border border-slate-700/60 bg-gradient-to-b from-slate-950 via-slate-900 to-amber-950/20"></canvas>
+        
+        <!-- Кастомный следящий прицел для ПК/визуальный элемент -->
+        <div id="custom-crosshair" class="absolute w-12 h-12 rounded-full border-2 border-red-500/80 flex items-center justify-center hidden md:flex">
+            <div class="w-2 h-2 bg-red-500 rounded-full"></div>
+            <div class="absolute w-full h-[1px] bg-red-500/50"></div>
+            <div class="absolute h-full w-[1px] bg-red-500/50"></div>
+        </div>
+
+        <!-- Подсказка для старта -->
+        <div id="start-hint" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20 transition-opacity duration-300">
+            <div class="w-16 h-16 bg-red-600/20 border border-red-500 rounded-full flex items-center justify-center mb-4 animate-bounce">
+                <i class="fa-solid fa-crosshairs text-red-500 text-3xl"></i>
+            </div>
+            <h2 class="text-2xl font-bold mb-2 text-white">Готов к стрельбе?</h2>
+            <p class="text-slate-300 text-sm mb-6">Жми на мишени прямо на экране iPhone, чтобы сбить все 3 цели!</p>
+            <button id="start-btn" class="w-full max-w-xs py-3.5 px-6 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold rounded-xl shadow-lg shadow-red-900/40 active:scale-95 transition-all text-lg">
+                Начать стрельбу
+            </button>
+        </div>
+    </main>
+
+    <!-- Нижняя панель с патронами и звуком -->
+    <footer class="w-full max-w-md p-4 flex justify-between items-center z-10 bg-slate-800/80 backdrop-blur border-t border-slate-700/50 rounded-t-2xl shadow-lg">
+        <div class="flex items-center space-x-2">
+            <i class="fa-solid fa-crosshairs text-slate-400"></i>
+            <span class="text-xs text-slate-400">Тапай по экрану для выстрела</span>
+        </div>
+        <button id="sound-btn" class="w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-200 transition">
+            <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+        </button>
+    </footer>
+
+    <!-- Поздравление Modal (Победа) -->
+    <div id="win-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-gradient-to-b from-slate-800 to-slate-900 border-2 border-amber-500/50 w-full max-w-sm rounded-3xl p-6 text-center shadow-2xl transform scale-95 transition-transform duration-300">
+            
+            <div class="w-20 h-20 bg-amber-500/20 border-2 border-amber-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce shadow-lg shadow-amber-500/30">
+                <i class="fa-solid fa-trophy text-amber-400 text-4xl"></i>
+            </div>
+
+            <h3 class="text-slate-400 uppercase tracking-widest text-xs font-bold mb-1">Режим меткости: 100%</h3>
+            <h2 class="text-2xl font-black text-amber-300 mb-3 leading-snug">
+                ДА ТЫ СНАЙПЕР,<br>С ДНЕМ РОЖДЕНИЯ ТЕБЯ! 🎯🎂
+            </h2>
+
+            <p class="text-slate-300 text-sm mb-6 leading-relaxed">
+                Все 3 мишени уничтожены с первого захода! Желаем попадать точно в цель в любых жизненных задачах!
+            </p>
+
+            <button id="restart-btn" class="w-full py-3.5 px-6 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 hover:brightness-110 text-white font-extrabold rounded-xl shadow-lg shadow-amber-900/40 active:scale-95 transition-all text-base tracking-wide uppercase">
+                Сделать еще залп 🔄
+            </button>
+        </div>
+    </div>
+
+    <!-- Игровой скрипт -->
+    <script>
+        // --- Web Audio API Звуковые эффекты (без внешних файлов) ---
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playGunshot() {
+                if (!this.enabled) return;
+                this.init();
+                
+                const now = this.ctx.currentTime;
+                
+                // Шум для пшика пневматики
+                const bufferSize = this.ctx.sampleRate * 0.15;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(1000, now);
+                filter.Q.setValueAtTime(3, now);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                // Низкочастотный "пук" выстрела
+                const osc = this.ctx.createOscillator();
+                const oscGain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.08);
+
+                oscGain.gain.setValueAtTime(0.7, now);
+                oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+
+                osc.connect(oscGain);
+                oscGain.connect(this.ctx.destination);
+
+                noise.start(now);
+                osc.start(now);
+            }
+
+            playHitSound() {
+                if (!this.enabled) return;
+                this.init();
+
+                const now = this.ctx.currentTime;
+                // Звук дзинька металлической мишени
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 0.25);
+
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+            }
+
+            playVictorySound() {
+                if (!this.enabled) return;
+                this.init();
+
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    const now = this.ctx.currentTime + (idx * 0.1);
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now);
+
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start(now);
+                });
+            }
+        }
+
+        const sounds = new SoundEffects();
+
+        // --- Переменные игры ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreCounter = document.getElementById('score-counter');
+        const startHint = document.getElementById('start-hint');
+        const startBtn = document.getElementById('start-btn');
+        const winModal = document.getElementById('win-modal');
+        const restartBtn = document.getElementById('restart-btn');
+        const soundBtn = document.getElementById('sound-btn');
+        const soundIcon = document.getElementById('sound-icon');
+        const customCrosshair = document.getElementById('custom-crosshair');
+        const gameContainer = document.getElementById('game-container');
+
+        let targets = [];
+        let destroyedCount = 0;
+        let isGameActive = false;
+        let animationFrameId = null;
+        let particles = [];
+        let hitFlashes = [];
+
+        // Адаптивные размеры canvas
+        function resizeCanvas() {
+            const rect = gameContainer.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Класс Мишени
+        class Target {
+            constructor(id, yPercent, speed, radius) {
+                this.id = id;
+                this.yPercent = yPercent; // Высота в %
+                this.speed = speed;
+                this.radius = radius;
+                this.x = Math.random() * (canvas.width - radius * 2) + radius;
+                this.y = canvas.height * yPercent;
+                this.direction = Math.random() < 0.5 ? 1 : -1;
+                this.isHit = false;
+                this.hitAnimScale = 1;
+                this.hitAnimOpacity = 1;
+            }
+
+            update() {
+                if (this.isHit) {
+                    this.hitAnimScale += 0.05;
+                    this.hitAnimOpacity -= 0.08;
+                    return;
+                }
+
+                // Движение по горизонтали
+                this.x += this.speed * this.direction;
+
+                // Отскок от краев
+                if (this.x - this.radius <= 10) {
+                    this.x = this.radius + 10;
+                    this.direction = 1;
+                } else if (this.x + this.radius >= canvas.width - 10) {
+                    this.x = canvas.width - this.radius - 10;
+                    this.direction = -1;
+                }
+
+                // Обновляем Y при изменении размера экрана
+                this.y = canvas.height * this.yPercent;
+            }
+
+            draw() {
+                if (this.hitAnimOpacity <= 0) return;
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                if (this.isHit) {
+                    ctx.scale(this.hitAnimScale, this.hitAnimScale);
+                    ctx.globalAlpha = Math.max(0, this.hitAnimOpacity);
+                }
+
+                // Подвесная рельса/нить для мишени
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, -this.radius);
+                ctx.lineTo(0, -this.radius - 40);
+                ctx.stroke();
+
+                // 1. Внешнее металлическое кольцо
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#e2e8f0';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#0f172a';
+                ctx.stroke();
+
+                // 2. Чёрные кольца мишени
+                const rings = [0.8, 0.6, 0.4, 0.2];
+                rings.forEach((r, idx) => {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius * r, 0, Math.PI * 2);
+                    ctx.fillStyle = idx % 2 === 0 ? '#1e293b' : '#f8fafc';
+                    ctx.fill();
+                });
+
+                // 3. Красный центр ("Яблочко")
+                ctx.beginPath();
+                ctx.arc(0, 0, this.radius * 0.2, 0, Math.PI * 2);
+                ctx.fillStyle = '#ef4444';
+                ctx.fill();
+
+                // Цифры очков на мишени для антуража
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = `${Math.max(10, this.radius * 0.25)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('10', 0, -this.radius * 0.35);
+
+                ctx.restore();
+            }
+        }
+
+        // Класс частичек разлета при попадании
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 8;
+                this.vy = (Math.random() - 0.5) * 8;
+                this.radius = Math.random() * 3 + 2;
+                this.color = Math.random() < 0.5 ? '#ef4444' : '#f59e0b';
+                this.alpha = 1;
+                this.decay = Math.random() * 0.03 + 0.02;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= this.decay;
+            }
+
+            draw() {
+                if (this.alpha <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Анимация вспышки выстрела
+        class HitFlash {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 5;
+                this.maxRadius = 25;
+                this.alpha = 0.8;
+            }
+
+            update() {
+                this.radius += 3;
+                this.alpha -= 0.1;
+            }
+
+            draw() {
+                if (this.alpha <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#fef08a';
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Создание 3 мишеней
+        function initTargets() {
+            targets = [
+                new Target(1, 0.25, 2.2, 38), // Верхняя (быстрая)
+                new Target(2, 0.50, 1.6, 44), // Средняя
+                new Target(3, 0.72, 1.2, 48)  // Нижняя (чуть медленнее и крупнее)
+            ];
+            destroyedCount = 0;
+            scoreCounter.textContent = `${destroyedCount} / 3`;
+        }
+
+        // Фновый тир (декорации)
+        function drawBackground() {
+            // Линии горизонтальных рельсов мишеней
+            const rails = [0.25, 0.50, 0.72];
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 4;
+            rails.forEach(yPct => {
+                const y = canvas.height * yPct;
+                ctx.beginPath();
+                ctx.moveTo(0, y - 38);
+                ctx.lineTo(canvas.width, y - 38);
+                ctx.stroke();
+            });
+
+            // Сетка для антуража тира
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+        }
+
+        // Главный игровой цикл
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawBackground();
+
+            // Обновление и отрисовка мишеней
+            targets.forEach(target => {
+                target.update();
+                target.draw();
+            });
+
+            // Частицы от попадания
+            particles.forEach((p, index) => {
+                p.update();
+                p.draw();
+                if (p.alpha <= 0) particles.splice(index, 1);
+            });
+
+            // Вспышки выстрела
+            hitFlashes.forEach((f, index) => {
+                f.update();
+                f.draw();
+                if (f.alpha <= 0) hitFlashes.splice(index, 1);
+            });
+
+            if (isGameActive) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Обработчик выстрела (Клик / Тап)
+        function handleShoot(clientX, clientY) {
+            if (!isGameActive) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const touchX = clientX - rect.left;
+            const touchY = clientY - rect.top;
+
+            // Звук выстрела
+            sounds.playGunshot();
+
+            // Вибрация iPhone (если поддерживается)
+            if (navigator.vibrate) {
+                navigator.vibrate(35);
+            }
+
+            // Визуальная отдача экрана
+            gameContainer.classList.add('recoil');
+            setTimeout(() => gameContainer.classList.remove('recoil'), 80);
+
+            // Добавляем анимацию дымка/вспышки в месте клика
+            hitFlashes.push(new HitFlash(touchX, touchY));
+
+            // Проверка попадания в мишени
+            targets.forEach(target => {
+                if (!target.isHit) {
+                    const dist = Math.hypot(touchX - target.x, touchY - target.y);
+                    if (dist <= target.radius) {
+                        // ПОПАДАНИЕ!
+                        target.isHit = true;
+                        destroyedCount++;
+                        scoreCounter.textContent = `${destroyedCount} / 3`;
+
+                        sounds.playHitSound();
+
+                        // Разлет искр/осколков
+                        for (let i = 0; i < 15; i++) {
+                            particles.push(new Particle(target.x, target.y));
+                        }
+
+                        // Проверка победы
+                        if (destroyedCount >= 3) {
+                            setTimeout(triggerWin, 400);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Победа!
+        function triggerWin() {
+            isGameActive = false;
+            sounds.playVictorySound();
+
+            // Конфетти эффект
+            const duration = 3 * 1000;
+            const end = Date.now() + duration;
+
+            (function frame() {
+                confetti({
+                    particleCount: 5,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0 },
+                    colors: ['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#ec4899']
+                });
+                confetti({
+                    particleCount: 5,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1 },
+                    colors: ['#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#ec4899']
+                });
+
+                if (Date.now() < end) {
+                    requestAnimationFrame(frame);
+                }
+            })();
+
+            // Показ праздничного модального окна
+            winModal.classList.remove('hidden');
+            setTimeout(() => {
+                winModal.classList.add('opacity-100');
+                winModal.firstElementChild.classList.remove('scale-95');
+                winModal.firstElementChild.classList.add('scale-100');
+            }, 50);
+        }
+
+        // Старт игры
+        function startGame() {
+            sounds.init();
+            initTargets();
+            isGameActive = true;
+            startHint.classList.add('opacity-0', 'pointer-events-none');
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            gameLoop();
+        }
+
+        // Перезапуск игры
+        function restartGame() {
+            winModal.classList.remove('opacity-100');
+            winModal.firstElementChild.classList.remove('scale-100');
+            winModal.firstElementChild.classList.add('scale-95');
+            
+            setTimeout(() => {
+                winModal.classList.add('hidden');
+                startGame();
+            }, 300);
+        }
+
+        // --- События касания и кликов ---
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Предотвращаем двойной тап/зум на iOS
+            const touch = e.touches[0];
+            handleShoot(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        canvas.addEventListener('mousedown', (e) => {
+            handleShoot(e.clientX, e.clientY);
+        });
+
+        // Отслеживание курсора мышкой для ПК
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            customCrosshair.style.left = `${e.clientX - rect.left - 24}px`;
+            customCrosshair.style.top = `${e.clientY - rect.top - 24}px`;
+        });
+
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', restartGame);
+
+        // Переключатель звука
+        soundBtn.addEventListener('click', () => {
+            sounds.enabled = !sounds.enabled;
+            if (sounds.enabled) {
+                soundIcon.className = 'fa-solid fa-volume-high';
+                sounds.init();
+            } else {
+                soundIcon.className = 'fa-solid fa-volume-xmark text-red-400';
+            }
+        });
+
+        // Начальная отрисовка фона до старта
+        drawBackground();
+    </script>
+</body>
+</html>
